@@ -1,0 +1,11 @@
+{
+  "name": "omp-bifrost-codemode",
+  "version": "0.1.0",
+  "description": "Compact Tern and terminal cards for Bifrost code-mode tool calls in omp",
+  "license": "MIT",
+  "type": "module",
+  "files": ["index.ts"],
+  "omp": {
+    "extensions": ["./index.ts"]
+  }
+}
