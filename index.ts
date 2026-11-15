@@ -26,7 +26,7 @@ function routeOf(name: string): { server: string, tool: string } | undefined {
 
 function callOf(block: Block): Call | undefined {
 	const args = (block.args && typeof block.args === "object" ? block.args : {}) as Args
-	if (typeof args.path === "string" && args.path.startsWith("xd://")) {
+	if (block.toolName === "write" && typeof args.path === "string" && args.path.startsWith("xd://")) {
 		const route = routeOf(args.path)
 		if (!route) return undefined
 		let parsed: Args = {}
