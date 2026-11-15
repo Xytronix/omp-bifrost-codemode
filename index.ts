@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 type Span = { t: string, s?: string }
 type Row = string | Span[]
 type Args = Record<string, unknown>
-type Call = { tool: string, args: Args }
+type Call = { server: string, tool: string, args: Args }
 type Block = {
 	type: string
 	toolName?: string
@@ -18,16 +18,17 @@ const BUILTINS: Record<string, true> = { json: true, math: true, time: true, re:
 const WIDTH = 140
 const SHOWN = 5
 
-function toolOf(name: string): string | undefined {
-	const tool = /^(?:xd:\/\/)?mcp__.+?__([A-Za-z]+)$/.exec(name)?.[1].toLowerCase()
-	return tool && TOOLS[tool] ? tool : undefined
+function routeOf(name: string): { server: string, tool: string } | undefined {
+	const m = /^(?:xd:\/\/)?mcp__(.+?)__([A-Za-z]+)$/.exec(name)
+	const tool = m?.[2].toLowerCase()
+	return m && tool && TOOLS[tool] ? { server: m[1], tool } : undefined
 }
 
 function callOf(block: Block): Call | undefined {
 	const args = (block.args && typeof block.args === "object" ? block.args : {}) as Args
 	if (typeof args.path === "string" && args.path.startsWith("xd://")) {
-		const tool = toolOf(args.path)
-		if (!tool) return undefined
+		const route = routeOf(args.path)
+		if (!route) return undefined
 		let parsed: Args = {}
 		if (typeof args.content === "string") {
 			try {
@@ -35,10 +36,14 @@ function callOf(block: Block): Call | undefined {
 				if (value && typeof value === "object") parsed = value as Args
 			} catch {}
 		}
-		return { tool, args: parsed }
+		return { ...route, args: parsed }
 	}
-	const tool = toolOf(block.toolName ?? "")
-	return tool ? { tool, args } : undefined
+	const route = routeOf(block.toolName ?? "")
+	return route ? { ...route, args } : undefined
+}
+
+function head(call: Call, verb: string): Span {
+	return { t: `${call.server} ${verb} `, s: "accent" }
 }
 
 function textOf(result: unknown): string {
@@ -135,7 +140,7 @@ function execute(call: Call, text: string, block: Block): { label: Span[], rows:
 	const code = typeof call.args.code === "string" ? call.args.code : ""
 	const calls = serverCalls(code)
 	const what = calls.length > 0 ? calls.join(", ") : clip(code.split("\n").find(l => l.trim()) ?? "", 60)
-	const label: Span[] = [{ t: clip(what, 90), s: "mdCode" }]
+	const label: Span[] = [head(call, "run"), { t: clip(what, 90), s: "mdCode" }]
 	if (block.isPartial || !text) return { label, rows: [] }
 	if (block.isError) return { label, rows: errorRow(text) }
 	const rows: Row[] = []
@@ -154,7 +159,7 @@ function execute(call: Call, text: string, block: Block): { label: Span[], rows:
 function list(call: Call, text: string): { label: Span[], rows: Row[] } {
 	const query = typeof call.args.query === "string" ? call.args.query : ""
 	const server = typeof call.args.server === "string" ? call.args.server : ""
-	const label: Span[] = [{ t: query ? `“${clip(query, 80)}”` : server || "all servers", s: "mdCode" }]
+	const label: Span[] = [head(call, "list"), { t: query ? `“${clip(query, 80)}”` : server || "all servers", s: "mdCode" }]
 	const ranked = [...text.matchAll(/relevance=([\d.]+)\W+tool=([\w.-]+)/g)]
 	if (ranked.length > 0) {
 		const rows: Row[] = ranked.slice(0, SHOWN).map(m => [
@@ -178,7 +183,7 @@ function read(call: Call, text: string): { label: Span[], rows: Row[] } {
 			? [call.args.fileName]
 			: []
 	const names = files.map(f => f.replace(/^servers\//, "").replace(/\.pyi$/, ""))
-	const label: Span[] = [{ t: clip(names.join(", "), 90), s: "mdCode" }]
+	const label: Span[] = [head(call, "read"), { t: clip(names.join(", "), 90), s: "mdCode" }]
 	const multi = names.length > 1
 	const sigs: Span[][] = []
 	let server = ""
@@ -193,7 +198,7 @@ function read(call: Call, text: string): { label: Span[], rows: Row[] } {
 
 function docs(call: Call, text: string): { label: Span[], rows: Row[] } {
 	const id = [call.args.server, call.args.tool].filter(v => typeof v === "string").join(".")
-	const label: Span[] = [{ t: id, s: "mdCode" }]
+	const label: Span[] = [head(call, "docs"), { t: id, s: "mdCode" }]
 	const all = lines(text)
 	const rows: Row[] = []
 	const defAt = all.findIndex(l => /^def /.test(l))
